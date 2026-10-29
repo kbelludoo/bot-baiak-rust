@@ -1,0 +1,16 @@
+pub mod types;
+pub mod catalog;
+pub mod trpc;
+pub mod colyseus;
+pub mod api;
+pub mod bot;
+pub mod hunt_elements;
+pub mod autoconfig;
+pub mod autoequip;
+pub mod extras;
+pub mod talents;
+pub mod pass_rift_prof;
+pub mod auction;
+pub mod jev;
+pub mod sim;
+pub mod fingerprint;

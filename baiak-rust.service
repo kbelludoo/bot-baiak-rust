@@ -1,0 +1,17 @@
+[Unit]
+Description=Baiak Idle Native Rust Bot (Zero-GC)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/bot-baiak-rust
+ExecStart=/root/bot-baiak-rust/bot-baiak-rust-linux
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/baiak_rust.log
+StandardError=append:/var/log/baiak_rust.log
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
