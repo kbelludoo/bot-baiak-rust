@@ -1,0 +1,35 @@
+name: CI Build & Release Linux
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Código
+        uses: actions/checkout@v4
+
+      - name: Instalar Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      - name: Instalar musl-tools
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Executar Testes
+        run: cargo test --release
+
+      - name: Compilar Binário Estático Linux (Zero Dependências)
+        run: cargo build --release --target x86_64-unknown-linux-musl
+
+      - name: Publicar Binário no Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        with:
+          files: target/x86_64-unknown-linux-musl/release/bot-baiak-rust
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,4 +1,5 @@
 use crate::game::types::{CharacterInfo, PartyConfig};
+use crate::network::client::build_http_client;
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE, USER_AGENT};
 use reqwest::Client;
 use serde_json::{json, Value};
@@ -14,17 +15,14 @@ pub struct TRPCClient {
 }
 
 impl TRPCClient {
-    pub fn new(token: &str, origin: &str) -> Self {
+    pub fn new(token: &str, origin: &str, bind_ip: &str) -> Self {
         let base = if origin.is_empty() {
             DEFAULT_TRPC_BASE.to_string()
         } else {
             format!("{}/api/trpc", origin.trim_end_matches('/'))
         };
 
-        let client = Client::builder()
-            .timeout(Duration::from_secs(12))
-            .build()
-            .unwrap_or_else(|_| Client::new());
+        let client = build_http_client(bind_ip, 12);
 
         Self {
             base_url: base,

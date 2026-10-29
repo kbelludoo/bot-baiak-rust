@@ -19,13 +19,31 @@ pub fn estimate_dps(level: u32, party: bool) -> f64 {
     (0.5f64).max(lvl * (0.24 + 0.12 * 3.0 + 0.08 * 3.0) * n)
 }
 
+pub fn estimate_party_dps(levels: &[u32]) -> f64 {
+    if levels.is_empty() {
+        return estimate_dps(1, false);
+    }
+    let mut total = 0.0;
+    for &lvl in levels {
+        total += estimate_dps(lvl, true);
+    }
+    total
+}
+
 pub fn simulate_hunt(hunt_id: &str, level: u32) -> Option<HuntSimulation> {
+    simulate_party_hunt(hunt_id, &[level])
+}
+
+pub fn simulate_party_hunt(hunt_id: &str, party_levels: &[u32]) -> Option<HuntSimulation> {
     let facts = get_hunt_facts(hunt_id)?;
     if facts.avg_hp <= 0.0 {
         return None;
     }
 
-    let dps = estimate_dps(level, true);
+    let min_party_lvl = party_levels.iter().copied().min().unwrap_or(1);
+    let max_party_lvl = party_levels.iter().copied().max().unwrap_or(1);
+
+    let dps = estimate_party_dps(party_levels);
     let ttk = facts.avg_hp / dps.max(1.0);
     let mut spawn_s = facts.spawn_ms / 1000.0;
     if spawn_s < 0.2 {
@@ -40,10 +58,12 @@ pub fn simulate_hunt(hunt_id: &str, level: u32) -> Option<HuntSimulation> {
     let exp_h = kills_h * facts.avg_exp;
 
     let incoming = facts.avg_dmg * alive / ttk.max(0.25);
-    let sustain = (level as f64) * 18.0;
-    let can_tank = incoming < sustain * 5.0 || facts.avg_hp <= (level as f64) * 40.0;
+    // Sustain compartilhado com suporte de cura do Druid (bônus de 2.5x para party)
+    let party_mult = if party_levels.len() >= 3 { 2.5 } else { 1.0 };
+    let sustain = (max_party_lvl as f64) * 18.0 * party_mult;
+    let can_tank = incoming < sustain * 5.0 || facts.avg_hp <= (min_party_lvl as f64) * 40.0;
 
-    let score = exp_h + gold_h * 1.5;
+    let score = exp_h + gold_h * 2.0;
 
     Some(HuntSimulation {
         id: facts.id.clone(),
@@ -59,15 +79,20 @@ pub fn simulate_hunt(hunt_id: &str, level: u32) -> Option<HuntSimulation> {
 }
 
 pub fn find_optimal_hunt(level: u32, focus_gold: bool) -> Option<String> {
+    find_optimal_party_hunt(&[level], focus_gold)
+}
+
+pub fn find_optimal_party_hunt(party_levels: &[u32], focus_gold: bool) -> Option<String> {
     let all = get_all_hunts();
+    let min_party_lvl = party_levels.iter().copied().min().unwrap_or(1);
     let mut valid = Vec::new();
 
     for h in all {
-        if h.min_level > level {
+        if h.min_level > min_party_lvl {
             continue;
         }
-        if let Some(sim) = simulate_hunt(&h.id, level) {
-            if sim.can_tank && sim.ttk < 45.0 {
+        if let Some(sim) = simulate_party_hunt(&h.id, party_levels) {
+            if sim.can_tank && sim.ttk < 30.0 {
                 valid.push(sim);
             }
         }

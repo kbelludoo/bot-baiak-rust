@@ -1,15 +1,15 @@
 use crate::game::types::AccountConfig;
-use crate::network::client::StealthHttpClient;
+use reqwest::Client;
 use std::sync::Arc;
 
 pub struct GameApiClient {
-    http: Arc<StealthHttpClient>,
+    http: Arc<Client>,
     config: AccountConfig,
     base_url: String,
 }
 
 impl GameApiClient {
-    pub fn new(config: AccountConfig, http: Arc<StealthHttpClient>) -> Self {
+    pub fn new(config: AccountConfig, http: Arc<Client>) -> Self {
         let base = if config.credentials.origin.is_empty() {
             "https://baiakidle.com".to_string()
         } else {

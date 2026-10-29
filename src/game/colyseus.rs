@@ -59,9 +59,9 @@ pub struct ColyseusRoom {
 }
 
 impl ColyseusRoom {
-    pub async fn join_or_create(origin: &str, room_name: &str, options: Value) -> Result<Self, String> {
+    pub async fn join_or_create(origin: &str, room_name: &str, options: Value, bind_ip: &str) -> Result<Self, String> {
         let http_url = format!("{}/rt/matchmake/joinOrCreate/{}", origin.trim_end_matches('/'), room_name);
-        let client = reqwest::Client::new();
+        let client = crate::network::client::build_http_client(bind_ip, 15);
 
         let resp = client.post(&http_url)
             .json(&options)

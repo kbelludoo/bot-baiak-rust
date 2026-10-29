@@ -14,3 +14,4 @@ pub mod auction;
 pub mod jev;
 pub mod sim;
 pub mod fingerprint;
+pub mod version_watcher;

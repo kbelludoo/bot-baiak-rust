@@ -5,3 +5,5 @@ accounts.json
 *.key
 *.pem
 .secrets.json
+data/
+*.sh

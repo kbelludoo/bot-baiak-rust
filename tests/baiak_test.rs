@@ -30,7 +30,7 @@ async fn test_conta_2_sync_and_matchmake() {
     assert_eq!(acc2.name, "Conta 2 - mister k");
     assert!(acc2.enabled);
 
-    let trpc = bot_baiak_rust::game::trpc::TRPCClient::new(&acc2.credentials.token, &acc2.credentials.origin);
+    let trpc = bot_baiak_rust::game::trpc::TRPCClient::new(&acc2.credentials.token, &acc2.credentials.origin, "");
     if let Ok(chars) = trpc.get_characters().await {
         if !chars.is_empty() {
             println!("Personagem detectado na conta 2: {} (Level {})", chars[0].name, chars[0].level);

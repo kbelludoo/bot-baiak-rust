@@ -8,10 +8,11 @@ use crate::game::colyseus::ColyseusRoom;
 use crate::game::extras::{run_auto_prey, run_charms_auto, run_codex_auto_sync, run_daily_rewards, run_dungeon_auto, run_guild_tasks, run_safe_bosses};
 use crate::game::fingerprint::build_fingerprint;
 use crate::game::pass_rift_prof::{PassManager, RiftManager};
-use crate::game::sim::find_optimal_hunt;
+use crate::game::sim::{find_optimal_hunt, find_optimal_party_hunt};
 use crate::game::talents::spend_talents_for_party;
 use crate::game::trpc::TRPCClient;
 use crate::game::types::{AccountConfig, CharacterInfo};
+use crate::game::version_watcher::VersionChecker;
 use crate::subsystem::dailies::DailyManager;
 use crate::subsystem::inventory::InventoryManager;
 use crate::subsystem::potions::PotionManager;
@@ -38,6 +39,7 @@ pub struct BotInstance {
     pub all_characters: Arc<RwLock<Vec<CharacterInfo>>>,
     pub current_hunt_id: Arc<RwLock<String>>,
     pub turnstile_token: Arc<RwLock<String>>,
+    pub version_checker: Arc<VersionChecker>,
     pub kills: AtomicU64,
     pub gold: AtomicU64,
     pub exp: AtomicU64,
@@ -51,7 +53,7 @@ impl BotInstance {
         let cb_cfg = CircuitBreakerConfig::default();
         let cb = Arc::new(CircuitBreaker::new(&config.id, cb_cfg));
         let stam = Arc::new(StaminaController::new(StaminaConfig::default()));
-        let trpc = Arc::new(TRPCClient::new(&config.credentials.token, &config.credentials.origin));
+        let trpc = Arc::new(TRPCClient::new(&config.credentials.token, &config.credentials.origin, &config.settings.bind_ip));
         let initial_hunt = if !config.settings.hunt_target.is_empty() {
             config.settings.hunt_target.clone()
         } else {
@@ -74,6 +76,7 @@ impl BotInstance {
             all_characters: Arc::new(RwLock::new(Vec::new())),
             current_hunt_id: Arc::new(RwLock::new(initial_hunt)),
             turnstile_token: Arc::new(RwLock::new(String::new())),
+            version_checker: Arc::new(VersionChecker::new()),
             kills: AtomicU64::new(0),
             gold: AtomicU64::new(0),
             exp: AtomicU64::new(0),
@@ -99,9 +102,18 @@ impl BotInstance {
                         char_id_opt = Some(first.id.clone());
                         *self.character.write().await = Some(first.clone());
 
+                        let mut party_levels: Vec<u32> = chars.iter()
+                            .filter(|c| c.level > 100) // Considera membros ativos da party principal
+                            .map(|c| c.level)
+                            .collect();
+                        if party_levels.is_empty() {
+                            party_levels.push(first.level);
+                        }
+
                         let target_area = if !self.config.settings.hunt_target.is_empty() {
                             self.config.settings.hunt_target.clone()
-                        } else if let Some(sim_cave) = find_optimal_hunt(first.level, true) {
+                        } else if let Some(sim_cave) = find_optimal_party_hunt(&party_levels, self.config.settings.priority == "gold") {
+                            info!("🎯 [Simulador Anti-Wipe] Melhor cave calculada para o trio {:?}: [{}]", party_levels, sim_cave);
                             sim_cave
                         } else {
                             self.catalog.select_best_hunt(first.level)
@@ -133,7 +145,7 @@ impl BotInstance {
             if let Some(cid) = char_id_opt {
                 options["characterId"] = json!(cid);
             }
-            match ColyseusRoom::join_or_create(&origin, "hunt", options).await {
+            match ColyseusRoom::join_or_create(&origin, "hunt", options, &self.config.settings.bind_ip).await {
                 Ok(room) => {
                     info!("🎮 Sala Colyseus conectada! RoomID: {}, SessionID: {}", room.seat.room_id, room.seat.session_id);
 
@@ -214,10 +226,30 @@ impl BotInstance {
                 continue;
             }
 
-            // Stamina / Fadiga
-            if !self.stamina.should_hunt().await {
-                sleep(Duration::from_secs(5)).await;
+            // Stamina / Fadiga: Verifica se precisa recuperar stamina no treino ou voltar a caçar
+            let current_stamina = if let Some(c) = self.character.read().await.as_ref() {
+                c.stamina
+            } else {
+                42
+            };
+
+            // No Baiak Idle, stamina cheia é 42h (2520 min). Abaixo de 14h (840 min) o ganho de EXP/Loot cai pela metade.
+            let needs_rest = current_stamina < 16; // Menos de 16h = fadiga
+            let fully_rested = current_stamina >= 40; // 40h+ = stamina restaurada
+
+            if self.config.settings.auto_treino && needs_rest {
+                let room_guard = self.colyseus_room.read().await;
+                if let Some(r) = room_guard.as_ref() {
+                    let _ = r.send_action("mode", json!({ "mode": "exercise" })).await;
+                    let _ = r.send_action("tocity", json!({})).await;
+                }
+                sleep(Duration::from_secs(10)).await;
                 continue;
+            } else if fully_rested {
+                let room_guard = self.colyseus_room.read().await;
+                if let Some(r) = room_guard.as_ref() {
+                    let _ = r.send_action("mode", json!({ "mode": "hunt" })).await;
+                }
             }
 
             // Recompensas Diárias periódicas
@@ -275,6 +307,11 @@ impl BotInstance {
                         let deaths = self.death_count.load(Ordering::Relaxed) as usize;
                         run_safe_bosses(r, lvl, deaths).await;
                     }
+                }
+
+                // Checagem de Atualização do Baiak Idle a cada 200 loops (~5 minutos)
+                if loop_counter % 200 == 0 {
+                    self.version_checker.check_for_updates().await;
                 }
 
                 // Automação periódica de Dungeon a cada 150 loops
