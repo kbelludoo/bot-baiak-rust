@@ -47,10 +47,13 @@ pub async fn run_safe_bosses(room: &ColyseusRoom, player_level: u32, recent_deat
 
 pub async fn run_daily_rewards(room: &ColyseusRoom) {
     let _ = room.send_action("dailyclaim", json!({})).await;
+    tokio::time::sleep(std::time::Duration::from_millis(300 + (rand::random::<u64>() % 300))).await;
     let _ = room.send_action("bpclaim", json!({})).await;
+    tokio::time::sleep(std::time::Duration::from_millis(300 + (rand::random::<u64>() % 300))).await;
     let _ = room.send_action("reward", json!({ "action": "collectall" })).await;
+    tokio::time::sleep(std::time::Duration::from_millis(300 + (rand::random::<u64>() % 300))).await;
     let _ = room.send_action("sellreward", json!({})).await;
-    info!("🎁 [Daily] Resgatadas recompensas diárias, missões e baús");
+    info!("🎁 [Daily] Resgatadas recompensas diárias, missões e baús com pacing humano");
 }
 
 pub async fn run_auto_prey(room: &ColyseusRoom, current_hunt_id: &str) {

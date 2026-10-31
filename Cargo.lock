@@ -135,6 +135,7 @@ dependencies = [
  "getrandom 0.4.3",
  "hex",
  "hmac",
+ "rand 0.8.8",
  "regex",
  "reqwest",
  "rmp-serde",

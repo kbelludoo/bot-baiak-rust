@@ -347,7 +347,9 @@ impl BotInstance {
                 self.circuit_breaker.record_success().await;
             }
 
-            sleep(Duration::from_millis(1500)).await;
+            // Pacing orgânico com jitter (1.2s - 1.8s) para anti-detecção
+            let jitter = 0.8 + rand::random::<f64>() * 0.4;
+            sleep(Duration::from_secs_f64(1.5 * jitter)).await;
         }
 
         info!("🛑 Bot [{}] finalizado.", self.config.name);
